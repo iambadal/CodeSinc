@@ -1,131 +1,108 @@
-CollabCode — Real-Time Collaborative Code Editor
-A full-stack real-time collaborative code editor where multiple users can write, sync, and execute code together in shared rooms — built with React, Node.js, Socket.io, Monaco Editor, and Judge0.
-🔗 Live Demo
-App: https://collab-code-editor-psi.vercel.app
+<div align="center">
 
-Backend API: https://collab-code-editor-mvie.onrender.com
+# Real-Time Collaborative Code Editor
+### Rename repo to: `realtime-code-editor` (slightly cleaner, keep `collab-code-editor` if you prefer — either reads well)
 
-⚠️ Note: The backend runs on Render's free tier, which "sleeps" after periods of inactivity. The first request after idle time may take 20–50 seconds to respond while the server wakes up.
+Google-Docs-style collaboration, but for code — with in-browser execution across multiple languages.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://collab-code-editor-psi.vercel.app)
+![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)
+![Socket.io](https://img.shields.io/badge/Socket.io-010101?style=flat-square&logo=socketdotio&logoColor=white)
+![Monaco Editor](https://img.shields.io/badge/Monaco%20Editor-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white)
+![Judge0](https://img.shields.io/badge/Judge0%20API-FF6B00?style=flat-square)
 
-🚀 How to Use
+<!-- Suggested repo description: -->
+<!-- Real-time collaborative code editor with room-based multi-user sync (Socket.io + Monaco Editor) and in-browser multi-language code execution via Judge0 API. -->
 
-Open the live demo link above
-Enter your name → click + New Room (or paste a Room ID to join an existing one)
-Share the URL with others — everyone in the room sees live code changes instantly
-Pick a language from the dropdown (8 supported)
-Click ▶ Run to execute code via Judge0 and see output (stdout/stderr/compile errors)
+</div>
 
+## Overview
 
-🛠 Tech Stack
-LayerTechFrontendReact, Monaco Editor, React RouterRealtimeSocket.io (client + server)BackendNode.js, ExpressExecutionJudge0 CE API (REST)HostingVercel (frontend), Render (backend)StylingCustom CSS
+Built for pair programming and interview-style collaboration: multiple users join a room and edit the same file simultaneously, with cursor and content changes synced live. Code can be compiled and executed for real inside the browser, in several languages, without any local setup.
 
-💡 Features
+## Key Features
 
-Real-time multi-user code sync via Socket.io
-Room-based collaboration with shareable URLs
-Monaco Editor (same engine as VS Code)
-8 language support: JavaScript, Python, C++, C, Java, Go, Rust, TypeScript
-Live code execution via Judge0 API with colored output
-Live user presence list with color-coded indicators
-Join/leave notifications
-Synced language switching across all users in a room
+- **Room-based collaboration** — unique room IDs, multiple simultaneous editors
+- **Live sync** — Socket.io broadcasts every keystroke/change with minimal latency
+- **Monaco Editor** — the same editor engine behind VS Code, with syntax highlighting and IntelliSense
+- **Multi-language execution** — Judge0 API compiles and runs code server-side and returns output in-browser
+- **No setup required** — join a room link and start coding immediately
 
+## Architecture
 
-📁 Project Structure
-collab-editor/
-
+```
+collab-code-editor/
+├── client/
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Editor/        # Monaco integration
+│   │   │   ├── RoomJoin/
+│   │   │   └── OutputPanel/
+│   │   ├── socket/             # socket.io-client setup
+│   │   └── pages/
 ├── server/
+│   ├── index.js                # Express + Socket.io server
+│   ├── socketHandlers/         # room join/leave/sync events
+│   └── services/
+│       └── judge0.js           # code execution service
+└── README.md
+```
 
-│   ├── index.js          ← Express + Socket.io server, Judge0 integration
+## How Sync Works
 
-│   └── package.json
+1. A user creates or joins a room via a unique room ID
+2. The server maintains room state and broadcasts change events to all connected clients in that room via Socket.io
+3. Monaco Editor's change events are debounced and emitted to avoid flooding the socket connection
+4. On "Run", the current code + selected language is sent to the Judge0 API, and stdout/stderr is streamed back to all users in the room
 
-│
+## Tech Stack
 
-└── client/
+| Layer | Technology |
+|---|---|
+| Frontend | React, Monaco Editor |
+| Real-time | Socket.io |
+| Code Execution | Judge0 API |
+| Backend | Node.js, Express |
 
-├── public/
+## Live Demo
 
-│   └── index.html
+**[collab-code-editor-psi.vercel.app](https://collab-code-editor-psi.vercel.app)**
 
-└── src/
+<!-- SCREENSHOT SUGGESTIONS:
+1. Two browser windows side-by-side showing the same room with synced edits (this is the money shot — proves real-time works)
+2. Language selector dropdown + output panel showing executed result
+3. Room join screen
 
-├── App.js                  ← Routing
+DEMO GIF IDEA:
+Split-screen recording: two browser windows, same room. Type in window A, show it appear instantly in window B. Then run code and show output panel populate. 15-20s, this single GIF will do more for you than any paragraph of description. -->
 
-├── App.css                 ← Styles
+## Getting Started
 
-├── index.js                ← Entry point
+```bash
+git clone https://github.com/Manigupta03/realtime-code-editor.git
+cd realtime-code-editor
 
-├── context/
+# Server
+cd server && npm install
+cp .env.example .env   # add JUDGE0_API_KEY
+npm run dev
 
-│   └── SocketContext.jsx   ← Socket.io connection (points to Render backend)
+# Client
+cd ../client && npm install
+npm run dev
+```
 
-├── pages/
+## Roadmap / Improvement Ideas
 
-│   ├── Home.jsx            ← Landing / join page
+- [ ] Add operational transformation or CRDT (e.g. Yjs) for true conflict-free concurrent editing at scale
+- [ ] Add per-user cursor colors and name labels
+- [ ] Add chat/voice alongside the editor for pair-programming sessions
+- [ ] Persist room sessions (currently likely in-memory — document this limitation if so)
+- [ ] Rate-limit Judge0 calls to avoid API quota exhaustion
 
-│   └── EditorPage.jsx      ← Main editor page
+## Suggested GitHub Topics
+`socketio` `real-time` `monaco-editor` `collaborative-editor` `judge0-api` `react` `nodejs` `pair-programming`
 
-└── components/
+---
 
-├── UsersList.jsx       ← Live presence sidebar
-
-└── OutputPanel.jsx     ← Code execution output panel
-
-🖥 Running Locally
-If you want to run this project on your own machine instead of using the live demo:
-Prerequisites
-
-Node.js (v18+): https://nodejs.org → download LTS
-VS Code: https://code.visualstudio.com (recommended)
-
-1. Clone the repo
-git clone https://github.com/Manigupta03/collab-code-editor.git
-
-cd collab-code-editor
-2. Run the server
-cd server
-
-npm install
-
-node index.js
-You should see: Server running on port 5000
-3. Run the client
-Open a second terminal:
-
-cd client
-
-npm install
-
-npm start
-Browser opens at http://localhost:3000
-⚠️ Important — switch URLs back to localhost
-The client code currently points to the deployed Render backend (https://collab-code-editor-mvie.onrender.com). To run fully locally, change these two files back to http://localhost:5000:
-
-client/src/context/SocketContext.jsx
-client/src/pages/EditorPage.jsx
-
-
-🌐 Deployment
-This project is deployed as two separate services:
-
-Frontend (client/) → deployed on Vercel
-Backend (server/) → deployed on Render as a Web Service (Root Directory: server, Build: npm install, Start: node index.js)
-
-Any push to the main branch on GitHub automatically triggers a redeploy on both platforms.
-
-🔧 Troubleshooting
-Backend not responding / sync not working?
-
-The Render free-tier server sleeps after inactivity — wait ~30 seconds on first load and try again.
-Port already in use (local)?
-
-npx kill-port 5000
-npm install fails?
-
-npm install --legacy-peer-deps
-Monaco editor blank?
-
-Hard refresh the browser: Ctrl + Shift + R
-
+<div align="center">Built by <a href="https://github.com/Manigupta03">Mani Gupta</a></div>
