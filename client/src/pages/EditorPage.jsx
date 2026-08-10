@@ -50,6 +50,7 @@ export default function EditorPage() {
   const monacoRef = useRef(null);
   const remoteDecorations = useRef(new Map());
   const isRemoteUpdate = useRef(false);
+  const cursorThrottleRef = useRef(null);
   const runCodeRef = useRef();
 
   const addToast = useCallback((msg) => {
@@ -72,7 +73,7 @@ export default function EditorPage() {
     try {
       const executeEndpoint = `${backendUrl}/api/execute`;
       const { data } = await axios.post(executeEndpoint, {
-        code,
+        code: editorRef.current ? editorRef.current.getValue() : code,
         language,
         stdin,
       });
@@ -99,9 +100,24 @@ export default function EditorPage() {
       runCodeRef.current();
     });
 
+    editor.onDidChangeModelContent((e) => {
+      if (isRemoteUpdate.current) return;
+      const fullCode = editor.getValue();
+      socket?.emit("code-delta", {
+        roomId,
+        changes: e.changes,
+        fullCode,
+      });
+    });
+
     editor.onDidChangeCursorPosition((e) => {
-      if (socket && roomId) {
-        const selection = editor.getSelection();
+      if (!socket || !roomId) return;
+      if (cursorThrottleRef.current) return;
+
+      cursorThrottleRef.current = requestAnimationFrame(() => {
+        cursorThrottleRef.current = null;
+        if (!editorRef.current) return;
+        const selection = editorRef.current.getSelection();
         socket.emit("cursor-move", {
           roomId,
           position: e.position,
@@ -112,19 +128,30 @@ export default function EditorPage() {
             endColumn: selection.endColumn,
           },
         });
-      }
+      });
     });
   };
 
   useEffect(() => {
     if (!socket || !username) return;
 
-    socket.emit("join-room", { roomId, username });
+    const handleConnect = () => {
+      socket.emit("join-room", { roomId, username });
+    };
+
+    if (socket.connected) {
+      handleConnect();
+    }
+    socket.on("connect", handleConnect);
 
     socket.on("room-state", ({ code: roomCode, language: roomLang, users: roomUsers }) => {
+      isRemoteUpdate.current = true;
       setCode(roomCode);
       setLanguage(roomLang);
       setUsers(roomUsers);
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 50);
     });
 
     socket.on("user-joined", ({ username: name, users: updatedUsers }) => {
@@ -141,21 +168,41 @@ export default function EditorPage() {
         editorRef.current.deltaDecorations(oldDecs, []);
         remoteDecorations.current.delete(socketId);
       }
+
+      const safeId = socketId.replace(/[^a-zA-Z0-9]/g, "");
+      const styleEl = document.getElementById(`cursor-style-${safeId}`);
+      if (styleEl) styleEl.remove();
+    });
+
+    socket.on("code-delta-update", ({ socketId, changes, fullCode }) => {
+      if (socketId === socket.id || !editorRef.current || !monacoRef.current) return;
+
+      const monaco = monacoRef.current;
+      const edits = changes.map((c) => ({
+        range: new monaco.Range(
+          c.range.startLineNumber,
+          c.range.startColumn,
+          c.range.endLineNumber,
+          c.range.endColumn
+        ),
+        text: c.text,
+        forceMoveMarkers: true,
+      }));
+
+      isRemoteUpdate.current = true;
+      editorRef.current.executeEdits("remote-user", edits);
+      setCode(fullCode);
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 0);
     });
 
     socket.on("code-update", ({ code: newCode }) => {
       isRemoteUpdate.current = true;
-      if (editorRef.current) {
-        const position = editorRef.current.getPosition();
-        setCode(newCode);
-        setTimeout(() => {
-          if (editorRef.current && position) {
-            editorRef.current.setPosition(position);
-          }
-        }, 0);
-      } else {
-        setCode(newCode);
-      }
+      setCode(newCode);
+      setTimeout(() => {
+        isRemoteUpdate.current = false;
+      }, 0);
     });
 
     socket.on("language-update", ({ language: newLang }) => {
@@ -167,6 +214,7 @@ export default function EditorPage() {
 
       const monaco = monacoRef.current;
       const newDecorations = [];
+      const isLineOne = position?.lineNumber === 1;
 
       if (position) {
         newDecorations.push({
@@ -178,8 +226,7 @@ export default function EditorPage() {
           ),
           options: {
             className: `remote-cursor-${socketId.replace(/[^a-zA-Z0-9]/g, "")}`,
-            beforeContentClassName: `remote-cursor-line`,
-            hoverMessage: { value: `**${rName}** is here` },
+            hoverMessage: { value: `**${rName}**` },
           },
         });
       }
@@ -209,6 +256,8 @@ export default function EditorPage() {
         styleEl.id = `cursor-style-${safeId}`;
         document.head.appendChild(styleEl);
       }
+
+      const badgeTop = isLineOne ? "18px" : "-18px";
       styleEl.innerHTML = `
         .remote-cursor-${safeId} {
           border-left: 2px solid ${color} !important;
@@ -217,17 +266,18 @@ export default function EditorPage() {
         .remote-cursor-${safeId}::after {
           content: '${rName}';
           position: absolute;
-          top: -18px;
+          top: ${badgeTop};
           left: 0;
           background: ${color};
           color: #ffffff;
           font-size: 10px;
           font-weight: 600;
-          padding: 1px 4px;
+          padding: 1px 5px;
           border-radius: 3px;
           white-space: nowrap;
           pointer-events: none;
-          z-index: 10;
+          z-index: 20;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
         .remote-selection-${safeId} {
           background-color: ${color}33 !important;
@@ -240,23 +290,18 @@ export default function EditorPage() {
     });
 
     return () => {
+      socket.off("connect", handleConnect);
       socket.off("room-state");
       socket.off("user-joined");
       socket.off("user-left");
+      socket.off("code-delta-update");
       socket.off("code-update");
       socket.off("language-update");
       socket.off("cursor-update");
+
+      document.querySelectorAll("style[id^='cursor-style-']").forEach((el) => el.remove());
     };
   }, [socket, roomId, username, addToast]);
-
-  const handleCodeChange = (value) => {
-    if (isRemoteUpdate.current) {
-      isRemoteUpdate.current = false;
-      return;
-    }
-    setCode(value);
-    socket?.emit("code-change", { roomId, code: value });
-  };
 
   const handleLanguageChange = (e) => {
     const selectedLang = e.target.value;
@@ -271,7 +316,8 @@ export default function EditorPage() {
   const downloadCodeFile = () => {
     const currentLangObj = LANGUAGES.find((l) => l.value === language);
     const ext = currentLangObj ? currentLangObj.ext : "txt";
-    const blob = new Blob([code], { type: "text/plain;charset=utf-8" });
+    const currentText = editorRef.current ? editorRef.current.getValue() : code;
+    const blob = new Blob([currentText], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -393,7 +439,6 @@ export default function EditorPage() {
               height="100%"
               language={language === "cpp" ? "cpp" : language}
               value={code}
-              onChange={handleCodeChange}
               onMount={handleEditorMount}
               theme="vs-dark"
               options={{

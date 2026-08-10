@@ -128,6 +128,17 @@ io.on("connection", (socket) => {
     socket.data.username = username;
   });
 
+  socket.on("code-delta", ({ roomId, changes, fullCode }) => {
+    if (rooms[roomId] && fullCode !== undefined) {
+      rooms[roomId].code = fullCode;
+    }
+    socket.to(roomId).emit("code-delta-update", {
+      socketId: socket.id,
+      changes,
+      fullCode,
+    });
+  });
+
   socket.on("code-change", ({ roomId, code }) => {
     if (rooms[roomId]) rooms[roomId].code = code;
     socket.to(roomId).emit("code-update", { code });
