@@ -4,3 +4,24 @@ build/
 dist/
 .DS_Store
 *.log
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+build/
+dist/
+
+# Local migration backup
+client/migration-backup/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
